@@ -1,0 +1,55 @@
+# Experiment config: CutMix condition
+#
+# A rectangular patch from x₂ replaces the same region in x₁:
+#   x_mixed[:, x1:x2, y1:y2] = x₂[:, x1:x2, y1:y2]
+# Labels mixed proportionally to the actual patch area.
+# Patch dimensions scale with spectrogram aspect ratio (not square).
+#
+# From an XAI perspective: CutMix preserves local spectral structure within
+# each region (intact features, not blended), but the cut is spatially random
+# — it has no knowledge of which frequency bands are discriminative.
+# We expect FBC scores between Vanilla Mixup (worse) and Puzzle Mix (better).
+# This tests hypothesis H3.
+#
+# Usage:
+#   python src/train.py \
+#     --condition cutmix \
+#     --seed 42 \
+#     --data-root data/ESC-50 \
+#     --results-root results \
+#     --epochs 200
+
+condition: cutmix
+seeds: [42, 43, 44]
+
+# --- Data ---
+data_root: data/ESC-50
+num_classes: 50
+
+# --- Architecture ---
+model: resnet18
+pretrained: true
+input_channels: 1
+
+# --- Training ---
+epochs: 200
+batch_size: 64
+lr: 0.1
+optimizer: sgd
+optimizer_kwargs:
+  momentum: 0.9
+  weight_decay: 0.0001
+  nesterov: true
+scheduler: cosine_annealing
+scheduler_kwargs:
+  T_max: 200
+  eta_min: 0.0
+
+# --- Augmentation ---
+alpha: 0.4   # Beta(0.4, 0.4) controls expected patch area: (1−λ) of total area
+# Patch dimensions: patch_h = sqrt(1−λ) × H, patch_w = sqrt(1−λ) × W
+# At alpha=0.4 and mean λ≈0.844, expected patch area ≈ 15.6% of spectrogram
+
+# --- Logging / checkpointing ---
+results_root: results
+save_every: 10

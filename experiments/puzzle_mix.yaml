@@ -1,0 +1,76 @@
+# Experiment config: Puzzle Mix condition
+# Kim et al., "Puzzle Mix: Exploiting Saliency and Local Statistics for
+# Optimal Mixup", ICML 2020.
+#
+# Puzzle Mix constructs mixed examples by:
+#   1. Computing a per-block saliency map (L2 norm of input gradient).
+#   2. Solving an α-β swap graph cut to find the mask that maximises exposed
+#      saliency while penalising spatially incoherent cuts.
+#   3. Optionally applying an optimal transport step to move high-saliency
+#      blocks into the mask-exposed regions.
+#   4. Blending the (possibly transported) images using the upsampled mask.
+#
+# Adaptations from the reference implementation (for non-square spectrograms):
+#   - Square pixel blocks (block_size × block_size) with separate block_h/block_w
+#   - Per-axis normalised transport cost matrix
+#   - pygco.cut_simple_vh instead of gco.cut_grid_graph
+#   - Adversarial component (Algorithm 2) excluded
+#
+# From an XAI perspective: Puzzle Mix explicitly maximises saliency exposure
+# in the graph-cut objective.  We expect this to produce the most faithful
+# saliency maps (highest FBC/SPG, lowest entropy) — hypothesis H1.
+#
+# Usage:
+#   python src/train.py \
+#     --condition puzzle_mix \
+#     --seed 42 \
+#     --data-root data/ESC-50 \
+#     --results-root results \
+#     --epochs 200
+
+condition: puzzle_mix
+seeds: [42, 43, 44]
+
+# --- Data ---
+data_root: data/ESC-50
+num_classes: 50
+
+# --- Architecture ---
+model: resnet18
+pretrained: true
+input_channels: 1
+
+# --- Training ---
+epochs: 200
+batch_size: 64
+lr: 0.1
+optimizer: sgd
+optimizer_kwargs:
+  momentum: 0.9
+  weight_decay: 0.0001
+  nesterov: true
+scheduler: cosine_annealing
+scheduler_kwargs:
+  T_max: 200
+  eta_min: 0.0
+
+# --- Augmentation ---
+alpha: 0.4   # Beta(0.4, 0.4) — same as Mixup and CutMix for comparability
+
+# --- Puzzle Mix specific hyperparameters (Kim et al. 2020 defaults) ---
+puzzle_mix:
+  beta: 1.2        # pairwise smoothness weight (normalised as β/max(block_h,block_w)/16)
+  gamma: 0.5       # data smoothness scaling
+  eta: 0.2         # label prior weight
+  neigh_size: 4    # resolution for pairwise penalty computation (pixels)
+  n_labels: 3      # discrete mixing levels: {0, 0.5, 1.0}
+  use_transport: true   # apply the optimal transport step
+  t_eps: 0.8       # transport cost coefficient
+  block_sizes: [16, 32]   # sampled uniformly per batch
+  # Note: adversarial component (Algorithm 2 of Kim et al.) is excluded.
+  # The adversarial component targets robustness, not saliency faithfulness.
+  # Excluding it keeps the Puzzle Mix condition strictly comparable to the others.
+
+# --- Logging / checkpointing ---
+results_root: results
+save_every: 10

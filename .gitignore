@@ -1,0 +1,41 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# Spectrogram cache (large .pt files computed from raw audio)
+data/ESC-50/spectrograms/
+*.pt
+
+# Model checkpoints (large — transfer manually or via separate storage)
+results/
+
+# Raw ESC-50 audio and archive (re-downloadable)
+data/ESC-50/audio/
+data/ESC-50/*.zip
+data/ESC-50/*.tar.gz
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Logs
+*.log

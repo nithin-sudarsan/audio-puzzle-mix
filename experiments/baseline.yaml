@@ -1,0 +1,47 @@
+# Experiment config: Baseline condition
+# No mixing augmentation — random crop + horizontal flip only.
+#
+# This is the control condition.  It establishes what saliency maps look like
+# when the model is trained without any explicit spatial structure in the
+# augmentation.  All three mixing conditions are evaluated against this baseline.
+#
+# Usage (for each of the 3 seeds):
+#   python src/train.py \
+#     --condition baseline \
+#     --seed 42 \
+#     --data-root data/ESC-50 \
+#     --results-root results \
+#     --epochs 200
+
+condition: baseline
+seeds: [42, 43, 44]
+
+# --- Data ---
+data_root: data/ESC-50
+num_classes: 50
+
+# --- Architecture ---
+model: resnet18
+pretrained: true
+input_channels: 1   # single-channel mel-spectrogram
+
+# --- Training ---
+epochs: 200
+batch_size: 64
+lr: 0.1
+optimizer: sgd
+optimizer_kwargs:
+  momentum: 0.9
+  weight_decay: 0.0001
+  nesterov: true
+scheduler: cosine_annealing
+scheduler_kwargs:
+  T_max: 200   # = epochs
+  eta_min: 0.0
+
+# --- Augmentation ---
+alpha: 0.4   # not used in baseline; included for config consistency
+
+# --- Logging / checkpointing ---
+results_root: results
+save_every: 10   # save a checkpoint every 10 epochs

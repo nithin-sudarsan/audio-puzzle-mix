@@ -1,0 +1,52 @@
+# Experiment config: Vanilla Mixup condition
+#
+# Each training example is a convex combination of two spectrogram/label pairs:
+#   x_mixed = λ·x₁ + (1−λ)·x₂
+#   y_mixed = λ·y₁ + (1−λ)·y₂
+# where λ ~ Beta(0.4, 0.4), folded to [0.5, 1.0].
+#
+# From an XAI perspective: Vanilla Mixup creates globally ambiguous inputs.
+# Every frequency bin is a blend of both sources.  We expect this to produce
+# the most diffuse saliency maps (highest entropy, lowest FBC) among the three
+# mixing conditions.  This tests hypothesis H3.
+#
+# Usage:
+#   python src/train.py \
+#     --condition vanilla_mixup \
+#     --seed 42 \
+#     --data-root data/ESC-50 \
+#     --results-root results \
+#     --epochs 200
+
+condition: vanilla_mixup
+seeds: [42, 43, 44]
+
+# --- Data ---
+data_root: data/ESC-50
+num_classes: 50
+
+# --- Architecture ---
+model: resnet18
+pretrained: true
+input_channels: 1
+
+# --- Training ---
+epochs: 200
+batch_size: 64
+lr: 0.1
+optimizer: sgd
+optimizer_kwargs:
+  momentum: 0.9
+  weight_decay: 0.0001
+  nesterov: true
+scheduler: cosine_annealing
+scheduler_kwargs:
+  T_max: 200
+  eta_min: 0.0
+
+# --- Augmentation ---
+alpha: 0.4   # Beta(0.4, 0.4) — U-shaped, concentrates mass near 0 and 1
+
+# --- Logging / checkpointing ---
+results_root: results
+save_every: 10
