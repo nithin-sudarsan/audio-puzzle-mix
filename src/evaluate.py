@@ -146,10 +146,14 @@ def evaluate_condition(
     )
 
     # --- Class profiles (training data only) ---
-    # compute_class_profiles builds profiles from the training split internally
+    # Build a train loader to pass to compute_class_profiles
     print(f"[evaluate] Building class profiles from training data...")
-    class_profiles = compute_class_profiles(data_root=data_root)   # (50, 128, 500)
-    class_profiles = class_profiles.to(device)
+    train_loader, _, _, _ = get_dataloaders(
+        data_root=data_root,
+        batch_size=batch_size,
+        num_workers=0,
+    )
+    class_profiles = compute_class_profiles(train_loader, num_classes=num_classes, device=device)   # (50, 128, 500)
 
     # --- Collect saliency maps for correctly-classified examples ---
     all_saliency = []
