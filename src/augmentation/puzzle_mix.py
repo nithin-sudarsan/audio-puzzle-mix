@@ -30,10 +30,9 @@ are (128 × 500) — non-square.  The following changes were made:
   c. Channel count: the reference hardcodes C=3 in transport_image.  We
      parametrise over the channel count (C=1 for our spectrograms).
 
-  d. Graph cut library: the reference uses `gco.cut_grid_graph` (not available
-     as a standalone package).  We use `pygco.cut_simple_vh`, which accepts
-     separate vertical/horizontal pairwise weight arrays and handles rectangular
-     grids natively.
+  d. Graph cut library: the reference uses `gco.cut_grid_graph`.  We support
+     both `pygco` (macOS, exposes `cut_simple_vh`) and `gco-wrapper` (Linux/GPU,
+     exposes `cut_grid_graph`) via a unified `_gco_cut()` shim.
 
   e. Adversarial component: excluded.  The adversarial perturbation in Algorithm 2
      of Kim et al. is designed to improve adversarial robustness — it is not
@@ -53,9 +52,48 @@ gradient) before switching back to train mode for the actual update.
 """
 
 import numpy as np
-import pygco
 import torch
 import torch.nn.functional as F
+
+# Support both pygco (macOS) and gco-wrapper (Linux/GPU server).
+# pygco exposes cut_simple_vh; gco-wrapper exposes cut_grid_graph.
+# We normalise both to a single _gco_cut() function below.
+try:
+    import pygco as _pygco_mod
+    _GCO_BACKEND = 'pygco'
+except ImportError:
+    try:
+        import gco as _gco_mod
+        _GCO_BACKEND = 'gco'
+    except ImportError:
+        raise ImportError(
+            "No graph-cut library found. "
+            "Install pygco (macOS) or gco-wrapper (Linux): pip install gco-wrapper"
+        )
+
+
+def _gco_cut(unary_cost, pairwise_cost_int, costV, costH, block_h, block_w, n_iter=5):
+    """Unified graph-cut interface for pygco and gco-wrapper.
+
+    pygco.cut_simple_vh expects full (block_h, block_w) costV/costH arrays
+    (with the last row/col unused).
+
+    gco.cut_grid_graph expects the natural (block_h-1, block_w) and
+    (block_h, block_w-1) arrays — no padding needed.
+    """
+    if _GCO_BACKEND == 'pygco':
+        return _pygco_mod.cut_simple_vh(
+            unary_cost, pairwise_cost_int, costV, costH,
+            n_iter=n_iter, algorithm='swap',
+        )
+    else:
+        # gco-wrapper uses the trimmed arrays directly
+        cost_v = costV[:block_h - 1, :]          # (block_h-1, block_w)
+        cost_h = costH[:, :block_w - 1]          # (block_h, block_w-1)
+        return _gco_mod.cut_grid_graph(
+            unary_cost, pairwise_cost_int, cost_v, cost_h,
+            n_iter=n_iter, algorithm='swap',
+        )
 from torch import Tensor
 
 
@@ -280,12 +318,12 @@ def _graphcut_single(
     costH[:, :block_w - 1] = pw_y_scaled   # (block_h, block_w-1) → first block_w-1 cols
 
     # Solve the α-β swap graph cut.
-    # pygco.cut_simple_vh minimises the total energy (unary + pairwise) over
-    # the grid graph, using the α-β swap algorithm for multi-label problems.
+    # _gco_cut abstracts over pygco (macOS) and gco-wrapper (Linux/GPU),
+    # minimising the total energy (unary + pairwise) over the grid graph.
     # Returns an integer label array of shape (block_h, block_w).
-    labels = pygco.cut_simple_vh(
+    labels = _gco_cut(
         unary_cost, pairwise_cost_int, costV, costH,
-        n_iter=5, algorithm='swap',
+        block_h=block_h, block_w=block_w, n_iter=5,
     )   # shape: (block_h, block_w), values in 0 .. n_labels-1
 
     # Convert label indices to mask values in [0, 1]:
