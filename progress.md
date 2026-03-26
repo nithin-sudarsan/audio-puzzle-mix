@@ -281,16 +281,23 @@ Without normalisation, louder clips dominate the class profile. We care about th
 ### EXPERIMENTS
 *Target: ~400 words. Describe the experimental setup (what was run, with what seeds, what was logged). Write after training is complete.*
 
-**Experimental setup (fixed — write this section now):**
+**Experimental setup:**
 
 | Property | Value |
 |---|---|
 | Conditions | 4: baseline, vanilla_mixup, cutmix, puzzle_mix |
-| Seeds per condition | 3 (42, 43, 44) |
-| Total runs | 12 |
+| Seeds per condition | 1 (seed=42) — mini-project scope |
+| Total runs | 4 |
 | Epochs per run | 200 |
-| Hardware | Apple M-series (MPS), no CUDA GPU |
+| Hardware | NVIDIA L4 GPU (24GB VRAM, CUDA 13.1), department cluster |
 | Model parameters | 11,195,890 trainable |
+| Runs executed in parallel | Yes — 3 conditions simultaneously on separate GPUs (CUDA_VISIBLE_DEVICES=1,2,3) |
+
+**Practical notes:**
+- puzzle_mix seed 42 trained first on Apple M-series MPS locally; remaining 3 conditions trained on department L4 GPU
+- `gco-wrapper` (Linux) used on GPU instead of `pygco` (macOS) — unified via `_gco_cut()` shim in `puzzle_mix.py`
+- Training launched inside `tmux` to survive SSH disconnection
+- Spectrogram cache (2,000 `.pt` files, ~500MB) transferred via `rsync` to avoid recomputation
 
 **What is logged per epoch:**
 - Training loss (mean over batches)
@@ -304,83 +311,113 @@ Without normalisation, louder clips dominate the class profile. We care about th
 - `hparams.txt`: all hyperparameters logged at run start
 
 **Evaluation protocol:**
-- Load `best.pt` checkpoint (not last epoch — avoids overfitting to final LR)
+- Load `best.pt` checkpoint (not last epoch)
 - Compute saliency only for correctly-classified test examples
 - Class profiles built from training folds 1–3 only (independent of test set)
 - Metrics: FBC, SPG, Sharpness per example → aggregate per class and overall
 
-**To fill after training runs:**
-- Actual wall-clock training time per condition
-- Whether any conditions show training instability (loss spikes, accuracy collapse)
-- Final test accuracy per (condition, seed)
-- Results table from `results/all_conditions_summary.csv`
+**Best epoch per condition:**
+| Condition | Best Epoch | Val Acc |
+|---|---|---|
+| baseline | 174 | 0.685 |
+| vanilla_mixup | 165 | 0.688 |
+| cutmix | 140 | 0.690 |
+| puzzle_mix | 128 | 0.630 |
 
-**Run commands:**
-```bash
-# One run (example):
-python src/train.py --condition puzzle_mix --seed 42 --epochs 200
-
-# All 12 runs:
-for condition in baseline vanilla_mixup cutmix puzzle_mix; do
-  for seed in 42 43 44; do
-    python src/train.py --condition $condition --seed $seed --epochs 200
-  done
-done
-
-# Evaluate all after training:
-python src/evaluate.py --all --seeds 42 43 44
-```
+Puzzle Mix reached its best validation accuracy earlier (epoch 128) and at a lower value — consistent with stronger regularisation from the saliency-guided augmentation on a small dataset.
 
 ---
 
 ### RESULTS
-*Target: ~600 words. Tables and figures. Write after training is complete.*
+*Target: ~600 words. Tables and figures.*
 
-*(To be filled after training runs)*
+#### Main Results Table
 
-**Tables to produce:**
-1. Test accuracy (mean ± std across 3 seeds) × 4 conditions
-2. FBC score (mean ± std) × 4 conditions — overall and per-class heatmap
-3. SPG score × 4 conditions
-4. Saliency sharpness (entropy) × 4 conditions
+| Condition | Test Acc | n_correct | FBC (↑) | SPG (↑) | Sharpness entropy (↓) |
+|---|---|---|---|---|---|
+| baseline | 0.685 | 242/400 | 0.1691 ± 0.107 | 0.331 | 10.339 ± 0.286 |
+| vanilla_mixup | 0.688 | 255/400 | 0.1405 ± 0.050 | 0.325 | 10.485 ± 0.097 |
+| cutmix | 0.690 | 231/400 | 0.1861 ± 0.116 | 0.281 | 10.246 ± 0.306 |
+| puzzle_mix | 0.630 | 229/400 | **0.1970 ± 0.116** | **0.336** | 10.318 ± 0.301 |
 
-**Figures to produce:**
+*(Single seed per condition — no mean ± std across seeds. Std reported is across test examples within the condition.)*
+
+#### Hypothesis Assessment
+
+**H1 (Puzzle Mix highest FBC and SPG):** Partially supported.
+- Puzzle Mix achieves the highest FBC (0.197) and highest SPG (0.336) across all four conditions.
+- However, the margins are small: FBC advantage over CutMix is 0.011; over baseline is 0.028.
+- With a single seed these differences cannot be tested for statistical significance.
+
+**H2 (Puzzle Mix lowest saliency entropy):** Not supported.
+- CutMix has the lowest entropy (10.246), not Puzzle Mix (10.318).
+- Puzzle Mix entropy is lower than baseline (10.339) and vanilla_mixup (10.485), but not the lowest overall.
+- Note: the differences are small (< 0.24 nats across all conditions out of a maximum of 11.07).
+
+**H3 (ordering: Puzzle Mix > CutMix > Vanilla Mixup > Baseline on FBC):** Partially supported.
+- FBC ordering: Puzzle Mix (0.197) > CutMix (0.186) > **Baseline (0.169) > Vanilla Mixup (0.140)**
+- The Puzzle Mix > CutMix > Baseline ordering holds, but Vanilla Mixup falls *below* baseline — an unexpected finding.
+- SPG ordering does not follow the same pattern: Puzzle Mix (0.336) > Baseline (0.331) > Vanilla Mixup (0.325) > CutMix (0.281).
+- CutMix SPG (0.281) is the lowest despite having the second-highest FBC — suggests CutMix produces spatially concentrated saliency that is not well-aligned with class profiles.
+
+**H4 (null result — gradient saliency too noisy):** Partially relevant.
+- The differences exist but are modest. With a single seed and no significance testing, it is not possible to rule out noise.
+- Vanilla Mixup FBC < Baseline is a meaningful finding: globally blended inputs actively harm perceptual faithfulness relative to no mixing at all.
+
+#### Key Unexpected Finding
+Puzzle Mix achieves the best FBC/SPG at a 6% accuracy cost (0.630 vs ~0.688–0.690 for other conditions). This is the most important result for the Discussion: the model is more perceptually faithful but less accurate. Possible explanations:
+1. **Over-regularisation on a small dataset:** ESC-50 has only 24 training clips/class. Puzzle Mix's complex per-batch saliency computation may introduce too much variance in the training signal for such limited data.
+2. **Early stopping bias:** Puzzle Mix's best checkpoint was at epoch 128 vs 174 for baseline — it may benefit from a different LR schedule.
+3. **Saliency cold-start:** Early training saliency is noisy (model not yet discriminative), which may lead Puzzle Mix masks to be random in early epochs before the feedback loop stabilises.
+
+#### Vanilla Mixup below Baseline on FBC — interpretation
+Vanilla Mixup FBC (0.140) is lower than baseline (0.169). This is consistent with the hypothesis that globally blended inputs discourage spatial feature localisation: every frequency bin at every time step is a blend of both sources, so the model has no incentive to concentrate attention on class-defining bands. This is the mechanism described in the Introduction and provides direct empirical support for it.
+
+#### Figures to produce (for notebooks/)
 1. Example spectrogram + saliency map overlaid, for each condition, same test clip
-2. Class profile examples (5–6 representative classes) showing spectral structure
-3. FBC per-class heatmap (50 classes × 4 conditions)
-4. Saliency entropy distribution (box plots per condition)
+2. Class profile examples (5–6 representative classes)
+3. FBC per-class bar chart (4 conditions side-by-side)
+4. Saliency entropy bar chart (4 conditions)
 
 ---
 
 ### DISCUSSION
 *Target: ~500 words. Interpret results against H1–H4. Flag limitations. Connect to XAI themes.*
 
-*(To be filled after results — but pre-note the structure)*
-
-**Questions to address against each hypothesis:**
-- H1: Is Puzzle Mix FBC/SPG significantly above CutMix? Use paired t-tests across seeds.
-- H2: Is Puzzle Mix saliency entropy the lowest?
-- H3: Is the ordering Puzzle Mix > CutMix > Vanilla Mixup > Baseline monotonic?
-- H4: If H1 doesn't hold, what does that say about gradient saliency as a training signal?
+**Central argument to make:**
+The results provide weak but directionally consistent evidence that Puzzle Mix's saliency-guided training produces models whose saliency maps are more perceptually faithful. The FBC and SPG orderings partially support H1 and H3, but the accuracy cost and the small margins suggest the mechanism is less powerful than hoped on a small dataset like ESC-50. This is itself a meaningful finding.
 
 **XAI connections to draw:**
-1. *Saliency faithfulness*: Does training with saliency as an inductive bias improve saliency faithfulness? This directly tests a gap in the Puzzle Mix paper.
-2. *Training–explanation feedback loop*: Puzzle Mix collapses the separation between training and explanation. Is this beneficial? The results provide empirical evidence.
-3. *Perceptual alignment*: The project distinguishes perceptual faithfulness from technical faithfulness. This distinction is the report's conceptual contribution even if the empirical results are null.
+
+1. *Saliency faithfulness vs. technical faithfulness:* The results show that Puzzle Mix improves perceptual faithfulness (FBC, SPG) slightly while not consistently improving sharpness (entropy). This is consistent with the distinction drawn in the Background: a model can attend to the right frequency bands (perceptual faithfulness) without necessarily being more decisive (sharpness). These are genuinely distinct properties.
+
+2. *Training–explanation feedback loop:* Puzzle Mix collapses the separation between training and explanation. The results suggest this loop provides a weak but real inductive bias toward perceptual faithfulness. However, the 6% accuracy cost raises the question of whether this trade-off is worthwhile in practice — explainability improved at the expense of task performance.
+
+3. *Vanilla Mixup actively harms perceptual faithfulness:* FBC below baseline (0.140 vs 0.169) is the clearest finding. This is direct empirical evidence that globally blended inputs discourage spatial feature localisation, consistent with the mechanism described in the Introduction.
 
 **Limitations to acknowledge:**
-- Class-conditional profiles are poor proxies for high-variance classes
-- Vanilla gradient saliency is known to be noisy; using a single saliency method limits generalisability (would SmoothGrad or Integrated Gradients show different patterns?)
-- ResNet-18 is designed for square natural images; the (128 × 500) non-square spectrogram is not its intended input domain. We adapted Puzzle Mix to handle rectangular inputs — note this as a contribution.
-- ESC-50 has only 24 training clips/class per fold, which limits statistical power for class-level conclusions
-- No GPU available locally; training on MPS (Apple Silicon) — document this
+- **Single seed per condition:** No statistical significance testing is possible. The FBC differences (0.011 between Puzzle Mix and CutMix) may be within sampling noise.
+- **Small training set:** 24 clips/class is extremely limited for a complex augmentation like Puzzle Mix. The accuracy cost may be a dataset-size effect rather than an intrinsic property of the method.
+- **Class-conditional profiles as proxy:** High-variance classes (e.g. "breathing", "footsteps") will have diffuse profiles that are poor references. FBC/SPG on these classes will be low for all conditions — this dilutes the overall metric.
+- **Single saliency method:** Using vanilla gradients for both the training signal and the evaluation metric creates a closed loop that may not generalise. SmoothGrad or Integrated Gradients might show different patterns.
+- **Puzzle Mix LR schedule:** Puzzle Mix's best epoch (128) is earlier than other conditions (140–174), suggesting it may benefit from a slower LR decay or warm-up schedule.
+- **No adversarial component:** Kim et al.'s Algorithm 2 was excluded. Its effect on saliency faithfulness is unknown.
+
+**What to say about H4 (null result interpretation):**
+The results are not a clean null — differences exist in the right direction. But the effect sizes are small and the accuracy cost is substantial. A reasonable conclusion: vanilla gradient saliency is informative enough to provide a weak inductive bias, but too noisy to produce large improvements in perceptual faithfulness on a 24-clip-per-class dataset. This is a finding about the limits of gradient saliency as a training signal, not just a null result.
 
 ---
 
 ### CONCLUSION
 *Target: ~200 words. Restate the research question, summarise the answer (positive, negative, or nuanced), connect to XAI module themes.*
 
-*(To be written last)*
+**Key points to hit:**
+- Restate the question: does training with saliency-aware augmentation produce models whose saliency maps are more perceptually faithful?
+- Answer: yes, weakly — Puzzle Mix achieves the highest FBC (0.197) and SPG (0.336), but at a 6% accuracy cost and with small margins over CutMix.
+- The ordering of FBC (Puzzle Mix > CutMix > Baseline > Vanilla Mixup) is the clearest finding: it establishes that the nature of the spatial mixing inductive bias matters, not just whether mixing is used.
+- Vanilla Mixup below baseline is a strong secondary finding: global blending actively harms perceptual faithfulness.
+- The accuracy–faithfulness trade-off raises a broader XAI question: when improving explanation quality costs task performance, is it worthwhile? This connects to the module theme of evaluation and the costs of explainability.
+- Future work: more seeds, larger dataset, stronger saliency methods (SmoothGrad), and exploring whether the LR schedule can be tuned to recover accuracy without sacrificing faithfulness.
 
 ---
 
@@ -411,6 +448,6 @@ This section records design decisions that deviate from the proposal or that req
 
 3. **Adversarial component:** Puzzle Mix includes an optional adversarial training component (Algorithm 2 in Kim et al.). Decision: **exclude it** to keep the comparison clean (the adversarial component is about robustness, not saliency quality). → Document this decision in Methodology.
 
-4. **Training time on CPU/MPS:** 200 epochs × 4 conditions × 3 seeds = 2,400 training-epoch equivalents. With no GPU, this may be slow. → Consider reducing to 100 epochs with a note that results are preliminary, or use MPS acceleration. Decide after Stage 8.
+4. **Training time on CPU/MPS:** ✅ Resolved. Trained on department NVIDIA L4 GPU (CUDA). puzzle_mix seed 42 trained locally on MPS; remaining 3 conditions on L4 in parallel. 200 epochs per condition.
 
-5. **Statistical testing:** With only 3 seeds, paired t-tests have very low power. Consider: (a) reporting with confidence intervals; (b) using the variance across classes (50 data points per condition) as the unit of analysis. → Decide after seeing results.
+5. **Statistical testing:** ✅ Decision made: single seed per condition (mini-project scope). No paired t-tests possible. Report point estimates with per-example std. Acknowledge this as a limitation. The variance across 50 classes (per-class FBC) can be used as a proxy for uncertainty in future work.

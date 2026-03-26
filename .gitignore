@@ -24,13 +24,14 @@ data/ESC-50/spectrograms/
 # Model checkpoints (large — transfer manually or via separate storage)
 results/
 
-# Raw ESC-50 audio and archive (re-downloadable)
-data/ESC-50/audio/
-data/ESC-50/*.zip
-data/ESC-50/*.tar.gz
+# Data and figures
+data/
+figures/
 
 # OS
 .DS_Store
+._.DS_Store
+._*
 Thumbs.db
 
 # IDE
@@ -39,3 +40,10 @@ Thumbs.db
 
 # Logs
 *.log
+
+# Report (local copy)
+L193_ Explainable Artificial Intelligence.md
+
+# Claude
+.claude/
+CLAUDE.md
