@@ -1,0 +1,10 @@
+condition=puzzle_mix
+seed=42
+n_correct=229
+fbc_mean=0.19704401091556617
+fbc_std=0.11617636048043452
+spg_hit_rate=0.33624454148471616
+sharpness_mean=10.317824163811697
+sharpness_std=0.3014098161406689
+best_epoch=128
+test_acc=0.63

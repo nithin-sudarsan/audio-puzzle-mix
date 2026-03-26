@@ -1,0 +1,10 @@
+condition=baseline
+seed=42
+n_correct=242
+fbc_mean=0.16905180720690216
+fbc_std=0.1070841193697156
+spg_hit_rate=0.3305785123966942
+sharpness_mean=10.339330342190324
+sharpness_std=0.2861241978655901
+best_epoch=174
+test_acc=0.685

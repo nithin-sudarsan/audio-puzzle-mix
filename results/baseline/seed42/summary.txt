@@ -1,0 +1,5 @@
+condition=baseline
+seed=42
+best_val_acc=0.685
+best_epoch=174
+test_acc=0.605

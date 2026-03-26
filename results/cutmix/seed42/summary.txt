@@ -1,0 +1,5 @@
+condition=cutmix
+seed=42
+best_val_acc=0.69
+best_epoch=140
+test_acc=0.5775

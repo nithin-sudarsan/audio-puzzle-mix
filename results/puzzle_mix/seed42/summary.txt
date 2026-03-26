@@ -1,0 +1,5 @@
+condition=puzzle_mix
+seed=42
+best_val_acc=0.63
+best_epoch=128
+test_acc=0.5725

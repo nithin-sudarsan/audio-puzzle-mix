@@ -21,8 +21,6 @@ env/
 data/ESC-50/spectrograms/
 *.pt
 
-# Model checkpoints (large — transfer manually or via separate storage)
-results/
 
 # Data and figures
 data/

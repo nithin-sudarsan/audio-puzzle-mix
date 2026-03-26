@@ -1,0 +1,5 @@
+condition=vanilla_mixup
+seed=42
+best_val_acc=0.6875
+best_epoch=165
+test_acc=0.6375

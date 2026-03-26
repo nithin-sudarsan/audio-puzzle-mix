@@ -1,0 +1,10 @@
+condition=baseline
+seed=42
+device=cuda
+epochs=200
+batch_size=64
+lr=0.1
+alpha=0.4
+num_classes=50
+optimizer=SGD momentum=0.9 weight_decay=1e-4 nesterov=True
+scheduler=CosineAnnealingLR T_max=200 eta_min=0.0

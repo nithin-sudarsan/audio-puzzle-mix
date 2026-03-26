@@ -1,0 +1,10 @@
+condition=cutmix
+seed=42
+n_correct=231
+fbc_mean=0.18609466028749336
+fbc_std=0.11562874585181189
+spg_hit_rate=0.2813852813852814
+sharpness_mean=10.246350829219406
+sharpness_std=0.3063399554941249
+best_epoch=140
+test_acc=0.69

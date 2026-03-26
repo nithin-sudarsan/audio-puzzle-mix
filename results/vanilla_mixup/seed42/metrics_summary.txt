@@ -1,0 +1,10 @@
+condition=vanilla_mixup
+seed=42
+n_correct=255
+fbc_mean=0.14046065793731408
+fbc_std=0.04979918447993691
+spg_hit_rate=0.3254901960784314
+sharpness_mean=10.484763238944259
+sharpness_std=0.09654054567841944
+best_epoch=165
+test_acc=0.6875
